@@ -1,0 +1,12 @@
+風餐露宿 CAMP LIFE v2 部署摘要
+
+這是完整 Worker 專案，不是把 ZIP 貼進 Cloudflare 編輯器。
+Worker 名稱：black-unit-0ca4
+網站資料：public/data/campsites.json（1,804 筆）
+網站入口：public/index.html
+資料庫增補：database_setup.sql
+
+部署方式：需要可執行 Node.js / Wrangler 的環境，並登入原本 Cloudflare 帳號。
+命令：npm install；npx wrangler login；npx wrangler deploy
+
+不要在 Cloudflare Edit code 貼整份 HTML，也不要新建另一個 Worker 代替原專案。
