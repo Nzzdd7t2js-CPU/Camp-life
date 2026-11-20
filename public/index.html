@@ -10,6 +10,45 @@
 @media(max-width:1100px){.availability-search{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.availability-search>div{min-width:0}.availability-search>button{width:100%;min-width:0;white-space:normal}.availability-search #searchAvailability{grid-column:1}.availability-search #clearAvailability{grid-column:2}.availability-search>label{grid-column:1/-1!important}}
 @media(max-width:800px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.search{grid-template-columns:1fr 1fr}.search > input{grid-column:1/-1}.search > button{grid-column:1/-1}.hero{padding-top:22px}}
 @media(max-width:520px){.cards{grid-template-columns:1fr}.photo{height:185px}.grid2{grid-template-columns:1fr}.wrap{padding:0 13px}.nav{gap:6px}.nav button{padding:9px 11px;font-size:13px}.search{grid-template-columns:1fr}.search > input,.search > button{grid-column:auto}.availability-search{grid-template-columns:1fr 1fr}.availability-search > button{grid-column:1/-1}.availability-search > div{min-width:0}}
+
+/* CAMP LIFE availability layout hard-fix: dates row, actions row */
+.availability-search{
+  grid-column:1 / -1 !important;
+  width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+  grid-template-rows:auto auto auto !important;
+  gap:12px !important;
+  align-items:end !important;
+}
+.availability-search > div{min-width:0 !important; width:100% !important;}
+.availability-search > div input{display:block !important; width:100% !important; max-width:100% !important; min-width:0 !important; box-sizing:border-box !important;}
+.availability-search > button{
+  display:block !important;
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+  min-height:44px !important;
+  margin:0 !important;
+  padding:10px 12px !important;
+  box-sizing:border-box !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  grid-column:auto !important;
+}
+.availability-search > #searchAvailability{grid-column:1 !important;}
+.availability-search > #clearAvailability{grid-column:2 !important;}
+.availability-search > label{grid-column:1 / -1 !important; min-width:0 !important;}
+.availability-search > label input{width:auto !important; min-width:0 !important;}
+@media(max-width:560px){
+  .availability-search{grid-template-columns:minmax(0,1fr) !important; grid-template-rows:auto !important;}
+  .availability-search > #searchAvailability,
+  .availability-search > #clearAvailability,
+  .availability-search > label{grid-column:1 !important;}
+}
+
 </style>
 </head>
 <body>
