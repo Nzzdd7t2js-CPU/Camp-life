@@ -99,7 +99,7 @@ if(!response.ok)throw new Error('讀取原始資料失敗：HTTP '+response.stat
 const source=await response.json();
 if(!Array.isArray(source)||source.length!==1804)throw new Error('原始資料筆數不是 1,804，已停止匯入');
 const excluded=new Set(['created_by_id','created_date','updated_date','owner_user_id']);
-const rows=source.map(item=>{const row={};for(const [key,value] of Object.entries(item)){if(!excluded.has(key))row[key]=value;}return row;});
+const timestampFields=new Set(['availability_checked_at','last_updated']);const rows=source.map(item=>{const row={};for(const [key,value] of Object.entries(item)){if(!excluded.has(key))row[key]=(timestampFields.has(key)&&value==='')?null:value;}return row;});
 let added=0;
 for(let i=0;i<rows.length;i+=50){
 const batch=rows.slice(i,i+50);
