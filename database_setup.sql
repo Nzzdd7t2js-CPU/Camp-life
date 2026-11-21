@@ -210,6 +210,9 @@ revoke all on function public.set_member_role(uuid,text) from public;
 grant execute on function public.set_member_role(uuid,text) to authenticated;
 
 
+-- 修正 campsites 資料表層級權限：RLS 仍會限制只有網站業主可新增／更新。
+grant insert, update on table public.campsites to authenticated;
+
 -- 修正 profiles 表的資料表層級讀取權限（RLS policy 不會自動授予 SQL GRANT）
 grant usage on schema public to authenticated;
 grant select on table public.profiles to authenticated;
