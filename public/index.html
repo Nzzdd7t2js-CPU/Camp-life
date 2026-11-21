@@ -100,20 +100,20 @@ const source=await response.json();
 if(!Array.isArray(source)||source.length!==1804)throw new Error('原始資料筆數不是 1,804，已停止匯入');
 const excluded=new Set(['created_by_id','created_date','updated_date','owner_user_id']);
 const timestampFields=new Set(['availability_checked_at','last_updated']);const rows=source.map(item=>{const row={};for(const [key,value] of Object.entries(item)){if(!excluded.has(key))row[key]=(timestampFields.has(key)&&value==='')?null:value;}return row;});
-let added=0;
 for(let i=0;i<rows.length;i+=50){
 const batch=rows.slice(i,i+50);
-const {data,error}=await sb.from('campsites').upsert(batch,{onConflict:'id',ignoreDuplicates:true}).select('id');
+const {error}=await sb.from('campsites').upsert(batch,{onConflict:'id',ignoreDuplicates:true});
 if(error)throw new Error('第 '+(i+1)+' 至 '+Math.min(i+50,rows.length)+' 筆匯入失敗：'+error.message);
-added+=(data||[]).length;
-if(progress)progress.textContent='處理中：'+Math.min(i+50,rows.length)+' / '+rows.length+' 筆；新增 '+added+' 筆';
+if(progress)progress.textContent='處理中：已安全處理 '+Math.min(i+50,rows.length)+' / '+rows.length+' 筆';
 }
-toast('匯入流程完成，共新增 '+added+' 筆；既有營區均保留');
-if(progress)progress.textContent='完成：檢查 '+rows.length+' 筆原始資料，新增 '+added+' 筆，既有資料未覆蓋。';
+const {count:dbCount,error:countError}=await sb.from('campsites').select('id',{count:'exact',head:true});
+if(countError)throw new Error('資料已送出，但無法核對資料庫筆數：'+countError.message);
+toast('資料庫目前可讀取 '+dbCount+' 筆營區；原始資料 '+rows.length+' 筆已完成比對');
+if(progress)progress.textContent='完成：原始資料 '+rows.length+' 筆；資料庫目前可讀取 '+dbCount+' 筆。既有資料不覆蓋。';
 await loadAdmin();await loadCamps();
 }catch(error){toast('匯入中止：'+error.message);if(progress)progress.textContent='匯入中止：'+error.message;}
 }
-function adminCampsiteSection(rows){return '<div class="panel"><h3>營區資料管理（目前顯示最多 200 筆）</h3>'+((rows||[]).map(x=>'<div class="entry"><b>'+esc(x.name)+'</b><p class="muted">'+esc([x.county,x.area,x.address].filter(Boolean).join(' · '))+'</p><button class="small" onclick="adminEditCampsite(\''+x.id+'\')">編輯營區資料</button></div>').join('')||'<p class="muted">目前沒有營區資料</p>')+'</div>'}
+function adminCampsiteSection(rows){return '<div class="panel"><h3>營區資料管理（目前顯示最多 200 筆）</h3><p class="muted">後台目前讀取到 '+(rows||[]).length+' 筆營區資料</p>'+((rows||[]).map(x=>'<div class="entry"><b>'+esc(x.name)+'</b><p class="muted">'+esc([x.county,x.area,x.address].filter(Boolean).join(' · '))+'</p><button class="small" onclick="adminEditCampsite(\''+x.id+'\')">編輯營區資料</button></div>').join('')||'<p class="muted">目前沒有營區資料</p>')+'</div>'}
 async function adminEditCampsite(id){if(currentProfile?.role!=='owner_admin')return toast('只有網站業主可以操作');let {data,error}=await sb.from('campsites').select('id,name,address,phone,price_note,legal_status,official_website,booking_url,image_url').eq('id',id).maybeSingle();if(error||!data)return toast('讀取營區資料失敗：'+(error?.message||'找不到資料'));const ask=(label,value)=>prompt(label,value??'');let name=ask('營區名稱',data.name);if(name===null)return;let address=ask('地址',data.address);if(address===null)return;let phoneValue=ask('聯絡電話',data.phone);if(phoneValue===null)return;let price=ask('價格說明',data.price_note);if(price===null)return;let legal=ask('合法狀態／查證標示',data.legal_status);if(legal===null)return;let website=ask('官方網站網址',data.official_website);if(website===null)return;let booking=ask('訂位資訊網址（僅提供外部連結，不代訂）',data.booking_url);if(booking===null)return;let imageUrl=ask('營區照片網址（留空則使用 AI 示意圖）',data.image_url);if(imageUrl===null)return;let {error:saveError}=await sb.from('campsites').update({name,address,phone:phoneValue,price_note:price,legal_status:legal,official_website:website,booking_url:booking,image_url:imageUrl||null}).eq('id',id);toast(saveError?'儲存失敗：'+saveError.message:'營區資料已更新');loadAdmin();loadCamps()}
 async function setMemberRole(id,role){if(currentProfile?.role!=='owner_admin')return toast('只有網站業主可以操作');let {error}=await sb.rpc('set_member_role',{target_user_id:id,new_role:role});toast(error?error.message:'會員身分已更新');loadAdmin()}
 async function adminSetStatus(table,id,status){if(currentProfile?.role!=='owner_admin')return toast('只有網站業主可以操作');if(!['journals','market_items','reviews'].includes(table))return;let {error}=await sb.from(table).update({status}).eq('id',id);toast(error?'操作失敗：'+error.message:(status==='published'?'已核准公開':'已退回／隱藏'));loadAdmin()}
