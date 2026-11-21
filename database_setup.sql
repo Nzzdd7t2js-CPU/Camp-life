@@ -166,3 +166,45 @@ create policy reviews_admin_manage on public.reviews
   for all using (public.is_site_admin()) with check (public.is_site_admin());
 create policy market_admin_manage on public.market_items
   for all using (public.is_site_admin()) with check (public.is_site_admin());
+
+
+-- === CAMP LIFE 業主會員管理與營主欄位權限收斂 ===
+
+-- 營主不能直接更新營區任意欄位，只能透過受限 RPC 修改電話與價格說明。
+drop policy if exists campsites_owner_update on public.campsites;
+create or replace function public.update_owned_campsite_details(
+  target_campsite_id text, new_phone text, new_price_note text
+) returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.campsites
+    where id = target_campsite_id
+      and (owner_user_id = auth.uid() or public.is_site_admin())
+  ) then
+    raise exception '沒有權限修改此營區';
+  end if;
+  update public.campsites
+    set phone = new_phone, price_note = new_price_note
+    where id = target_campsite_id;
+end;
+$$;
+revoke all on function public.update_owned_campsite_details(text,text,text) from public;
+grant execute on function public.update_owned_campsite_details(text,text,text) to authenticated;
+
+-- 網站業主管理會員角色；此函式不允許把一般會員升級為網站業主。
+create or replace function public.set_member_role(target_user_id uuid, new_role text)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_site_admin() then raise exception '只有網站業主可以管理會員身分'; end if;
+  if new_role not in ('member','camp_owner') then
+    raise exception '只允許設定一般會員或營主身分';
+  end if;
+  if target_user_id = auth.uid() then raise exception '不能透過此功能修改自己的業主身分'; end if;
+  update public.profiles set role = new_role where id = target_user_id;
+  if not found then raise exception '找不到會員'; end if;
+end; $$;
+revoke all on function public.set_member_role(uuid,text) from public;
+grant execute on function public.set_member_role(uuid,text) to authenticated;
