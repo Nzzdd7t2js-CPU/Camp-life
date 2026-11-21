@@ -110,10 +110,25 @@ const {count:dbCount,error:countError}=await sb.from('campsites').select('id',{c
 if(countError)throw new Error('資料已送出，但無法核對資料庫筆數：'+countError.message);
 toast('資料庫目前可讀取 '+dbCount+' 筆營區；原始資料 '+rows.length+' 筆已完成比對');
 if(progress)progress.textContent='完成：原始資料 '+rows.length+' 筆；資料庫目前可讀取 '+dbCount+' 筆。既有資料不覆蓋。';
-await loadAdmin();await loadCamps();
+await loadAdmin();await adminSearchCampsites(0);await loadCamps();
 }catch(error){toast('匯入中止：'+error.message);if(progress)progress.textContent='匯入中止：'+error.message;}
 }
-function adminCampsiteSection(rows){return '<div class="panel"><h3>營區資料管理（目前顯示最多 200 筆）</h3><p class="muted">後台目前讀取到 '+(rows||[]).length+' 筆營區資料</p>'+((rows||[]).map(x=>'<div class="entry"><b>'+esc(x.name)+'</b><p class="muted">'+esc([x.county,x.area,x.address].filter(Boolean).join(' · '))+'</p><button class="small" onclick="adminEditCampsite(\''+x.id+'\')">編輯營區資料</button></div>').join('')||'<p class="muted">目前沒有營區資料</p>')+'</div>'}
+let adminCampPage=0;
+async function adminSearchCampsites(page=0){
+if(currentProfile?.role!=='owner_admin')return;
+adminCampPage=Math.max(0,page);
+const box=$('adminCampResults'),info=$('adminCampInfo'),term=($('adminCampSearch')?.value||'').trim();
+if(box)box.innerHTML='<p class="muted">搜尋中…</p>';
+let q=sb.from('campsites').select('id,name,county,area,address,owner_user_id',{count:'exact'}).order('name').range(adminCampPage*50,adminCampPage*50+49);
+if(term){const safe=term.replace(/[,%()]/g,' ').trim();if(safe)q=q.or('name.ilike.%'+safe+'%,county.ilike.%'+safe+'%,area.ilike.%'+safe+'%,address.ilike.%'+safe+'%');}
+const {data,error,count}=await q;
+if(error){if(box)box.textContent='讀取失敗：'+error.message;return;}
+const total=count||0,pages=Math.max(1,Math.ceil(total/50));
+if(info)info.textContent='搜尋結果 '+total+' 筆；第 '+(adminCampPage+1)+' / '+pages+' 頁，每頁 50 筆';
+if(box)box.innerHTML=(data||[]).map(x=>'<div class="entry"><b>'+esc(x.name)+'</b><p class="muted">'+esc([x.county,x.area,x.address].filter(Boolean).join(' · '))+'</p><button class="small" onclick="adminEditCampsite(\''+x.id+'\')">編輯營區資料</button></div>').join('')||'<p class="muted">找不到符合的營區</p>';
+const prev=$('adminCampPrev'),next=$('adminCampNext');if(prev)prev.disabled=adminCampPage===0;if(next)next.disabled=adminCampPage>=pages-1;
+adminSearchCampsites(0);}
+function adminCampsiteSection(rows){return '<div class="panel"><h3>營區資料管理（全部營區可搜尋）</h3><p class="muted" id="adminCampInfo">正在載入營區資料…</p><div class="grid2"><input id="adminCampSearch" placeholder="搜尋營區名稱、縣市、鄉鎮或地址" onkeydown="if(event.key===\'Enter\')adminSearchCampsites(0)"><button class="small" onclick="adminSearchCampsites(0)">搜尋營區</button></div><div id="adminCampResults"></div><div class="actions"><button id="adminCampPrev" class="ghost small" onclick="adminSearchCampsites(adminCampPage-1)" disabled>上一頁</button><button id="adminCampNext" class="small" onclick="adminSearchCampsites(adminCampPage+1)">下一頁</button></div></div>'}
 async function adminEditCampsite(id){if(currentProfile?.role!=='owner_admin')return toast('只有網站業主可以操作');let {data,error}=await sb.from('campsites').select('id,name,address,phone,price_note,legal_status,official_website,booking_url,image_url').eq('id',id).maybeSingle();if(error||!data)return toast('讀取營區資料失敗：'+(error?.message||'找不到資料'));const ask=(label,value)=>prompt(label,value??'');let name=ask('營區名稱',data.name);if(name===null)return;let address=ask('地址',data.address);if(address===null)return;let phoneValue=ask('聯絡電話',data.phone);if(phoneValue===null)return;let price=ask('價格說明',data.price_note);if(price===null)return;let legal=ask('合法狀態／查證標示',data.legal_status);if(legal===null)return;let website=ask('官方網站網址',data.official_website);if(website===null)return;let booking=ask('訂位資訊網址（僅提供外部連結，不代訂）',data.booking_url);if(booking===null)return;let imageUrl=ask('營區照片網址（留空則使用 AI 示意圖）',data.image_url);if(imageUrl===null)return;let {error:saveError}=await sb.from('campsites').update({name,address,phone:phoneValue,price_note:price,legal_status:legal,official_website:website,booking_url:booking,image_url:imageUrl||null}).eq('id',id);toast(saveError?'儲存失敗：'+saveError.message:'營區資料已更新');loadAdmin();loadCamps()}
 async function setMemberRole(id,role){if(currentProfile?.role!=='owner_admin')return toast('只有網站業主可以操作');let {error}=await sb.rpc('set_member_role',{target_user_id:id,new_role:role});toast(error?error.message:'會員身分已更新');loadAdmin()}
 async function adminSetStatus(table,id,status){if(currentProfile?.role!=='owner_admin')return toast('只有網站業主可以操作');if(!['journals','market_items','reviews'].includes(table))return;let {error}=await sb.from(table).update({status}).eq('id',id);toast(error?'操作失敗：'+error.message:(status==='published'?'已核准公開':'已退回／隱藏'));loadAdmin()}
