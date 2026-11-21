@@ -101,3 +101,68 @@ for each row execute procedure public.handle_new_user();
 
 -- 第一次建立網站業主：先在網站註冊一個帳號，再把下方 email 換成該帳號 Email 執行一次。
 -- update public.profiles set role='owner_admin' where email='你的登入Email';
+
+
+-- === CAMP LIFE 安全補強與管理功能（增補，不刪除既有營區資料） ===
+
+-- 營主每日空位資料：公開唯讀，營主只能管理自己認領的營區，業主可完整管理。
+create table if not exists public.campsite_availability (
+  campsite_id text not null references public.campsites(id) on delete cascade,
+  available_date date not null,
+  remaining_slots integer not null default 0 check (remaining_slots >= 0),
+  updated_by uuid references public.profiles(id),
+  updated_at timestamptz not null default now(),
+  primary key (campsite_id, available_date)
+);
+alter table public.campsite_availability enable row level security;
+drop policy if exists availability_public_read on public.campsite_availability;
+drop policy if exists availability_owner_write on public.campsite_availability;
+drop policy if exists availability_admin_all on public.campsite_availability;
+create policy availability_public_read on public.campsite_availability
+  for select using (true);
+create policy availability_owner_write on public.campsite_availability
+  for all using (
+    exists (select 1 from public.campsites c
+      where c.id = campsite_id and c.owner_user_id = auth.uid())
+  ) with check (
+    updated_by = auth.uid() and exists (select 1 from public.campsites c
+      where c.id = campsite_id and c.owner_user_id = auth.uid())
+  );
+create policy availability_admin_all on public.campsite_availability
+  for all using (public.is_site_admin()) with check (public.is_site_admin());
+
+-- 防止同一營區被不同會員重複認領或轉移。
+create or replace function public.review_campsite_claim(claim_id uuid, approve boolean)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare r public.claim_requests%rowtype; existing_owner uuid;
+begin
+  if not public.is_site_admin() then raise exception '只有網站業主可以審核認領申請'; end if;
+  select * into r from public.claim_requests where id = claim_id for update;
+  if not found then raise exception '找不到認領申請'; end if;
+  if r.status <> 'pending' then raise exception '此申請已經處理'; end if;
+  if approve then
+    if r.campsite_id is null then raise exception '申請未綁定營區，無法核准'; end if;
+    select owner_user_id into existing_owner from public.campsites
+      where id = r.campsite_id for update;
+    if not found then raise exception '找不到此營區'; end if;
+    if existing_owner is not null and existing_owner <> r.user_id then
+      raise exception '此營區已由其他營主認領，不能重複轉移';
+    end if;
+    update public.campsites set owner_user_id = r.user_id where id = r.campsite_id;
+    update public.profiles set role = case when role = 'owner_admin' then role else 'camp_owner' end where id = r.user_id;
+    update public.claim_requests set status='approved', reviewed_by=auth.uid() where id=claim_id;
+  else
+    update public.claim_requests set status='rejected', reviewed_by=auth.uid() where id=claim_id;
+  end if;
+end; $$;
+revoke all on function public.review_campsite_claim(uuid,boolean) from public;
+grant execute on function public.review_campsite_claim(uuid,boolean) to authenticated;
+
+-- 業主可管理評論及二手裝備的審核狀態。
+drop policy if exists reviews_admin_manage on public.reviews;
+drop policy if exists market_admin_manage on public.market_items;
+create policy reviews_admin_manage on public.reviews
+  for all using (public.is_site_admin()) with check (public.is_site_admin());
+create policy market_admin_manage on public.market_items
+  for all using (public.is_site_admin()) with check (public.is_site_admin());
