@@ -57,9 +57,49 @@ function toast(s){$('toast').textContent=s;$('toast').style.display='block';clea
 function phone(raw){let v=String(raw??'').trim();if(!v)return '';let d=v.replace(/\D/g,'');if(/^9\d{8}$/.test(d))return '0'+d;if(/^8869\d{8}$/.test(d))return '0'+d.slice(3);return v}
 function asList(v){if(Array.isArray(v))return v;if(!v)return [];try{let x=JSON.parse(v);return Array.isArray(x)?x:[]}catch{return String(v).split(/[、,，]/).filter(Boolean)}}
 function photo(x){let url=String(x.image_url||'').trim();if(url)return `<img loading="lazy" src="${esc(url)}" alt="${esc(x.name)}">`;let n=0;for(const ch of String(x.id||x.name||'camp'))n=(n*31+ch.charCodeAt(0))>>>0;let src='/ai-camp-'+(n%4+1)+'.webp';return `<img loading="lazy" src="${src}" alt="露營環境 AI 示意圖"><span class="photo-label">AI 示意圖</span>`}
-async function loadCamps(){try{let r=await fetch('/data/campsites.json');if(!r.ok)throw Error('data');camps=await r.json()}catch(e){$('campCards').innerHTML='<div class="empty">營區資料載入失敗，請重新整理。</div>';return}
- if(sb){try{let {data,error}=await sb.from('campsites').select('*').order('name').limit(5000);if(!error&&data?.length)camps=data}catch(e){}}
- $('count').textContent=`全台共 ${camps.length.toLocaleString()} 個營區`;let counties=[...new Set(camps.map(x=>x.county).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));counties.forEach(v=>$('county').add(new Option(v,v)));camps.forEach(x=>$('claimCampsite').add(new Option(`${x.county||''} ${x.area||''}｜${x.name}`,x.id)));renderCamps()}
+async function loadCamps(){
+ camps=[];let dbError=null;
+ // 先從 Supabase 分頁讀取正式營區資料；不能讓空白／失效的靜態 JSON 阻斷整個首頁。
+ if(sb){
+  try{
+   let rows=[],from=0;
+   while(true){
+    const result=await Promise.race([
+     sb.from('campsites').select('*').order('name').range(from,from+999),
+     new Promise((_,reject)=>setTimeout(()=>reject(new Error('資料庫連線逾時')),15000))
+    ]);
+    if(result.error)throw result.error;
+    const batch=result.data||[];rows.push(...batch);
+    if(batch.length<1000)break;
+    from+=1000;
+   }
+   if(rows.length)camps=rows;
+  }catch(e){dbError=e?.message||String(e)}
+ }
+ // 資料庫沒有可用資料時，才嘗試靜態備援檔。
+ if(!camps.length){
+  try{
+   const r=await fetch('/data/campsites.json',{cache:'no-store'});
+   if(!r.ok)throw new Error('靜態資料 HTTP '+r.status);
+   const backup=await r.json();
+   if(!Array.isArray(backup)||!backup.length)throw new Error('靜態營區資料是空的');
+   camps=backup;
+  }catch(e){
+   $('count').textContent='營區資料目前無法載入';
+   $('campCards').innerHTML='<div class="empty">營區資料載入失敗。'+esc(dbError||e.message||'請稍後再試')+'<br>原始資料沒有被刪除，請檢查資料庫連線與讀取權限。</div>';
+   $('pager').innerHTML='';
+   return;
+  }
+ }
+ $('count').textContent=`全台共 ${camps.length.toLocaleString()} 個營區`;
+ $('county').innerHTML='<option value="">全部縣市</option>';
+ $('area').innerHTML='<option value="">全部鄉鎮</option>';
+ $('claimCampsite').innerHTML='<option value="">請選擇營區</option>';
+ let counties=[...new Set(camps.map(x=>x.county).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+ counties.forEach(v=>$('county').add(new Option(v,v)));
+ camps.forEach(x=>$('claimCampsite').add(new Option(`${x.county||''} ${x.area||''}｜${x.name}`,x.id)));
+ renderCamps();
+}
 function filtered(){let k=$('keyword').value.trim().toLowerCase(),c=$('county').value,a=$('area').value,av=$('availabilityFilter')?.value||'';let out=camps.filter(x=>{let s=String(x.availability_status||'').trim();let yes=/有空位|可預約|尚有名額|可訂位/i.test(s);let known=/有空位|可預約|尚有名額|可訂位|客滿|無空位|已滿/i.test(s);let dateState=availabilityMap.get(String(x.id));return (!c||x.county===c)&&(!a||x.area===a)&&(!av||(dateSearchActive?(av==='available'&&dateState?.status==='available')||(av==='unknown'&&(!dateState||dateState.status==='unknown')):(av==='available'&&yes)||(av==='unknown'&&!known)))&&(!k||[x.name,x.address,x.county,x.area,x.tagline,x.description,...asList(x.features),...asList(x.scenery)].join(' ').toLowerCase().includes(k))});let s=$('sort').value;if(s==='county')out.sort((a,b)=>`${a.county}${a.area}${a.name}`.localeCompare(`${b.county}${b.area}${b.name}`,'zh-Hant'));else if(s==='featured')out.sort((a,b)=>(b.is_featured===true)-(a.is_featured===true));else out.sort((a,b)=>String(a.name).localeCompare(String(b.name),'zh-Hant'));return out}
 function renderCamps(){let list=filtered(),pages=Math.max(1,Math.ceil(list.length/PAGE_SIZE));page=Math.min(page,pages-1);$('count').textContent=`找到 ${list.length.toLocaleString()} 個營區`;let shown=list.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);$('campCards').innerHTML=shown.map(x=>`<article class="card" onclick="showCamp('${esc(x.id)}')"><div class="photo">${photo(x)}${x.image_is_ai?'<span class="photo-label">AI 示意圖</span>':''}</div><div class="info"><div class="place">${esc(x.county)} ${esc(x.area)}</div><div class="name">${esc(x.name)}</div><div class="addr">${esc(x.address||'地址待確認')}</div><div class="chips">${x.legal_status?`<span class="chip ${String(x.legal_status).includes('未')?'warn':''}">${esc(x.legal_status)}</span>`:''}${x.altitude?`<span class="chip">海拔 ${esc(x.altitude)}m</span>`:''}${dateSearchActive?availabilityBadge(x.id):''}</div></div></article>`).join('')||'<div class="empty">沒有找到符合條件的營區</div>';$('pager').innerHTML=pages>1?`<button class="ghost" ${page===0?'disabled':''} onclick="page--;renderCamps()">上一頁</button><span class="muted">${page+1} / ${pages}</span><button class="ghost" ${page>=pages-1?'disabled':''} onclick="page++;renderCamps()">下一頁</button>`:''}
 function availabilityText(id){let a=availabilityMap.get(String(id));if(!a||a.status==='unknown')return '尚未確認，請洽營主';if(a.status==='full')return '所選日期已無空位';return `有空位（查詢期間每日最低剩餘 ${a.minSlots} 個）`}
@@ -147,7 +187,23 @@ async function adminEditCampsite(id){if(currentProfile?.role!=='owner_admin')ret
 async function setMemberRole(id,role){if(currentProfile?.role!=='owner_admin')return toast('只有網站業主可以操作');let {error}=await sb.rpc('set_member_role',{target_user_id:id,new_role:role});toast(error?error.message:'會員身分已更新');loadAdmin()}
 async function adminSetStatus(table,id,status){if(currentProfile?.role!=='owner_admin')return toast('只有網站業主可以操作');if(!['journals','market_items','reviews'].includes(table))return;let {error}=await sb.from(table).update({status}).eq('id',id);toast(error?'操作失敗：'+error.message:(status==='published'?'已核准公開':'已退回／隱藏'));loadAdmin()}
 async function reviewClaim(id,approve){let {error}=await sb.rpc('review_campsite_claim',{claim_id:id,approve});toast(error?error.message:(approve?'已核准認領':'已退回申請'));loadAdmin()}
-async function boot(){await loadCamps();if(sb){let {data}=await sb.auth.getSession();if(data?.session){currentUser=data.session.user;await loadProfile()}sb.auth.onAuthStateChange((_e,s)=>{currentUser=s?.user||null;if(currentUser)loadProfile();else{currentProfile=null;updateNav()}})} }
+async function boot(){
+ // 先還原登入狀態與會員角色，再顯示相應的後台入口。
+ if(sb){
+  try{
+   const {data,error}=await sb.auth.getSession();
+   if(error)throw error;
+   if(data?.session){currentUser=data.session.user;await loadProfile()}
+   else{currentUser=null;currentProfile=null;updateNav()}
+  }catch(e){$('userInfo').textContent='登入狀態讀取失敗：'+(e.message||e);updateNav()}
+  sb.auth.onAuthStateChange((_e,s)=>{
+   currentUser=s?.user||null;
+   if(currentUser)loadProfile();
+   else{currentProfile=null;updateNav()}
+  });
+ }else{updateNav()}
+ await loadCamps();
+}
 boot();window.createJournal=()=>createPost('journals');window.createMarket=()=>createPost('market_items');
 $('view-journals').querySelector('button').onclick=()=>createPost('journals');$('view-market').querySelector('button').onclick=()=>createPost('market_items');
 </script></body></html>
