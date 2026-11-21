@@ -46,7 +46,9 @@
 <div id="toast"></div><footer class="foot">風餐露宿 CAMP LIFE · 資訊以營主最新公告為準 · 空位請直接向營主確認</footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const SUPABASE_URL='https://nngtxzmusmuhfcqeixuta.supabase.co';
+
+const SUPABASE_URL='https://nngtxzmsmuhfcqeixuta.supabase.co';
+
 const SUPABASE_ANON_KEY='sb_publishable_uvxHoOKGE1Ia8b4iMMdFvw_af_0Viil';
 const sb=window.supabase?.createClient?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
 const PAGE_SIZE=24;let camps=[],page=0,currentUser=null,currentProfile=null,availabilityMap=new Map(),dateSearchActive=false;
