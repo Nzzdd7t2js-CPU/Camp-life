@@ -98,6 +98,13 @@ begin
 
   if not found then raise exception '找不到認領申請'; end if;
   if r.status <> 'pending' then raise exception '只有待審核申請可以變更驗證狀態'; end if;
+  if new_verification_status = 'verified' and (
+    nullif(trim(r.verification_method), '') is null
+    or nullif(trim(r.verification_target), '') is null
+    or nullif(trim(admin_note), '') is null
+  ) then
+    raise exception '核實前必須具備驗證方式、可核對管道及核對依據';
+  end if;
 
   update public.claim_requests
   set verification_status = new_verification_status,
