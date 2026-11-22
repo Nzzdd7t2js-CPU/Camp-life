@@ -29,7 +29,7 @@ from anon;
 
 -- A2. CSV 同時顯示 anon 有欄位層級 INSERT / UPDATE / REFERENCES。
 -- 撤銷這些欄位授權；單純 REVOKE 表層級權限不會自動移除欄位層級授權。
-do $
+do $audit$
 declare
   r record;
   cols text;
@@ -62,9 +62,9 @@ begin
     end if;
   end loop;
 end
-$;
+$audit$;
 
--- B. 日誌：只能以 pending 投稿；作者不得自行更新狀態或內容。
+-- B. 日誌：只能以 pending 投稿；作者可編輯自己的內容，但不能改審核狀態。
 drop policy if exists journals_insert_self on public.journals;
 create policy journals_insert_self
   on public.journals
@@ -72,16 +72,7 @@ create policy journals_insert_self
   to authenticated
   with check (user_id = auth.uid() and status = 'pending');
 
-drop policy if exists journals_update_self_admin on public.journals;
-drop policy if exists journals_admin_update_only on public.journals;
-create policy journals_admin_update_only
-  on public.journals
-  for update
-  to authenticated
-  using (public.is_site_admin())
-  with check (public.is_site_admin());
-
--- C. 評論：只能以 pending 投稿；作者不得自行更新審核狀態。
+-- C. 評論：只能以 pending 投稿；保留原有作者編輯政策，但禁止作者改審核狀態。
 drop policy if exists reviews_insert_self on public.reviews;
 create policy reviews_insert_self
   on public.reviews
@@ -89,9 +80,7 @@ create policy reviews_insert_self
   to authenticated
   with check (user_id = auth.uid() and status = 'pending');
 
-drop policy if exists reviews_update_self_admin on public.reviews;
-
--- D. 二手裝備：只能以 pending 投稿；作者不得自行更新審核狀態。
+-- D. 二手裝備：只能以 pending 投稿；保留原有作者編輯政策，但禁止作者改審核狀態。
 drop policy if exists market_insert_self on public.market_items;
 create policy market_insert_self
   on public.market_items
@@ -99,9 +88,41 @@ create policy market_insert_self
   to authenticated
   with check (user_id = auth.uid() and status = 'pending');
 
-drop policy if exists market_update_self_admin on public.market_items;
+-- E. 以資料庫 trigger 保護審核狀態，避免為了防止改狀態而剝奪作者正常編輯內容的能力。
+create or replace function public.prevent_member_content_status_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $
+begin
+  if old.status is distinct from new.status
+     and not public.is_site_admin() then
+    raise exception '投稿者不能自行修改審核狀態';
+  end if;
+  return new;
+end;
+$;
 
--- E. 空位：移除角色範圍過寬的舊 ALL policy，改用明確的 authenticated policies。
+revoke all on function public.prevent_member_content_status_change() from public;
+grant execute on function public.prevent_member_content_status_change() to authenticated;
+
+drop trigger if exists journals_guard_status on public.journals;
+create trigger journals_guard_status
+before update on public.journals
+for each row execute function public.prevent_member_content_status_change();
+
+drop trigger if exists reviews_guard_status on public.reviews;
+create trigger reviews_guard_status
+before update on public.reviews
+for each row execute function public.prevent_member_content_status_change();
+
+drop trigger if exists market_items_guard_status on public.market_items;
+create trigger market_items_guard_status
+before update on public.market_items
+for each row execute function public.prevent_member_content_status_change();
+
+-- F. 空位：移除角色範圍過寬的舊 ALL policy，改用明確的 authenticated policies。
 drop policy if exists availability_owner_write on public.campsite_availability;
 drop policy if exists availability_owner_insert on public.campsite_availability;
 drop policy if exists availability_owner_update on public.campsite_availability;
@@ -162,7 +183,7 @@ create policy availability_admin_all
 
 commit;
 
--- F. 驗收查詢：確認投稿與空位政策已更新。
+-- H. 驗收查詢：確認投稿與空位政策已更新。
 select schemaname, tablename, policyname, roles, cmd, qual, with_check
 from pg_policies
 where schemaname = 'public'
