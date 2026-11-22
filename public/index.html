@@ -143,6 +143,7 @@ async function loadProfile(){
  const extra=Object.entries(fieldLabels).filter(([k])=>data[k]&&k!=='display_name').map(([k,label])=>'<p><b>'+label+'：</b>'+esc(k==='created_at'?new Date(data[k]).toLocaleDateString('zh-TW'):data[k])+'</p>').join('');
  $('userInfo').textContent='';
  $('profileDetails').innerHTML='<p><b>顯示名稱：</b>'+esc(data.display_name||'尚未設定')+'</p><p><b>Email：</b>'+esc(user.email||data.email||'未提供')+'</p><p><b>帳號身分：</b>'+esc(roleLabel[data.role]||data.role||'一般會員')+'</p>'+extra+'<p><b>會員識別碼：</b><span class="muted">'+esc(data.id)+'</span></p>';
+ $('profileDetails').innerHTML+='<div class="actions"><button class="small" type="button" onclick="editMyNickname()">設定／修改暱稱</button></div>';
  $('authMsg').textContent='';
  updateNav();
  await loadMyContent();
@@ -155,6 +156,20 @@ function updateNav(){
  const accountNav=document.querySelector('.nav button[data-view="account"]');
  if(accountNav)accountNav.textContent=signedIn?'會員帳號':'會員登入';
  $('ownerNav').classList.remove('hidden');$('adminNav').classList.remove('hidden');
+}
+async function editMyNickname(){
+ if(!sb||!currentUser)return toast('請先登入會員');
+ const nickname=prompt('請輸入你想使用的暱稱',currentProfile?.display_name||'');
+ if(nickname===null)return;
+ const value=nickname.trim();
+ if(!value)return toast('暱稱不能空白');
+ if(value.length>30)return toast('暱稱最多 30 個字');
+ const userId=currentUser.id;
+ const {error}=await sb.from('profiles').update({display_name:value}).eq('id',userId);
+ if(error){toast('暱稱儲存失敗：'+error.message);return}
+ if(currentUser?.id!==userId)return;
+ toast('暱稱已更新');
+ await loadProfile();
 }
 async function submitClaim(){if(!requireAuth('認領'))return;let id=$('claimCampsite').value;if(!id)return toast('請選擇要認領的營區');let x=camps.find(c=>c.id===id);let {error}=await sb.from('claim_requests').insert({user_id:currentUser.id,campsite_id:id,campsite_name:x?.name||'',address:x?.address||'',proof_note:$('claimContact').value+'｜'+$('claimProof').value});toast(error?error.message:'已送出認領申請，等待業主審核')}
 async function loadPosts(table){
