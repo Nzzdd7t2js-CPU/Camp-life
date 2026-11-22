@@ -113,8 +113,40 @@ document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',(
 function requireAuth(task){if(!currentUser){toast('請先登入會員');switchView('account');return false}return true}
 async function signUp(){if(!sb){toast('會員服務暫時無法連線');return}let email=$('email').value.trim(),password=$('password').value;if(!email||password.length<8){$('authMsg').textContent='請輸入 Email，密碼至少 8 碼。';return}let {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:window.location.origin}});if(error){$('authMsg').textContent=error.message;return}if(data.session?.user){currentUser=data.session.user;await loadProfile();$('authMsg').textContent='註冊成功，會員已登入。';switchView('camps');toast('註冊成功，歡迎加入風餐露宿！')}else{currentUser=null;currentProfile=null;$('authMsg').textContent='註冊申請已送出，請先到 Email 收信並完成驗證，驗證後再登入。';$('userInfo').textContent='尚未完成 Email 驗證。';updateNav()}}
 async function signIn(){if(!sb)return toast('會員服務暫時無法連線');const email=$('email').value.trim(),password=$('password').value;if(!email||!password){$('authMsg').textContent='請輸入 Email 和密碼。';return}const {data,error}=await sb.auth.signInWithPassword({email,password});if(error){$('authMsg').textContent=error.message;return}if(data.session?.user){currentUser=data.session.user;await loadProfile();$('authMsg').textContent='';$('email').value='';$('password').value='';switchView('camps');toast('登入成功，歡迎回到風餐露宿！')}else{$('authMsg').textContent='尚未取得登入工作階段，請確認 Email 已完成驗證。'}}
-async function signOut(){if(!sb)return;const {error}=await sb.auth.signOut({scope:'local'});if(error){$('authMsg').textContent='登出失敗：'+error.message;return}currentUser=null;currentProfile=null;$('email').value='';$('password').value='';$('authMsg').textContent='';$('userInfo').textContent='已登出，目前沒有登入中的帳號。';$('myContent').innerHTML='登入後顯示你的日誌、裝備與認領狀態。';$('profileDetails').innerHTML='';updateNav();switchView('account');toast('已清除目前裝置的登入紀錄')}
-async function loadProfile(){if(!sb||!currentUser)return;const user=currentUser;let {data,error}=await sb.from('profiles').select('id,email,display_name,role').eq('id',user.id).maybeSingle();if(user.id!==currentUser?.id)return;if(error){currentProfile=null;$('userInfo').textContent=`會員資料讀取失敗：${error.message}`;updateNav();return}if(!data){currentProfile=null;$('userInfo').textContent=`找不到會員資料：${user.email}`;updateNav();return}currentProfile=data;$('userInfo').textContent='';$('profileDetails').innerHTML='<p><b>顯示名稱：</b>'+esc(data.display_name||'尚未設定')+'</p><p><b>Email：</b>'+esc(user.email||data.email||'未提供')+'</p><p><b>帳號身分：</b>'+esc(({owner_admin:'網站業主',camp_owner:'營主',member:'一般會員'}[data.role]||data.role||'一般會員'))+'</p><p><b>會員識別碼：</b><span class="muted">'+esc(data.id)+'</span></p>';$('authMsg').textContent='';updateNav();loadMyContent()}
+async function signOut(){
+ if(!sb)return;
+ const oldUserId=currentUser?.id;
+ const {error}=await sb.auth.signOut({scope:'local'});
+ if(error){$('authMsg').textContent='登出失敗：'+error.message;return}
+ currentUser=null;currentProfile=null;
+ $('email').value='';$('password').value='';
+ $('authMsg').textContent='已登出，請登入其他帳號。';
+ $('userInfo').textContent='';
+ $('myContent').innerHTML='登入後顯示你的日誌、裝備與認領狀態。';
+ $('profileDetails').innerHTML='';
+ $('ownerContent').textContent='登入並取得營主權限後顯示。';
+ $('adminContent').textContent='僅網站業主可使用。';
+ updateNav();
+ switchView('account');
+ toast('已清除目前裝置的登入紀錄');
+}
+async function loadProfile(){
+ if(!sb||!currentUser)return;
+ const user=currentUser;
+ const {data,error}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
+ if(user.id!==currentUser?.id)return;
+ if(error){currentProfile=null;$('userInfo').textContent='會員資料讀取失敗：'+error.message;updateNav();return}
+ if(!data){currentProfile=null;$('userInfo').textContent='找不到會員資料：'+user.email;updateNav();return}
+ currentProfile=data;
+ const roleLabel={owner_admin:'網站業主',camp_owner:'營主',member:'一般會員'};
+ const fieldLabels={phone:'聯絡電話',phone_number:'聯絡電話',full_name:'姓名',display_name:'顯示名稱',name:'姓名',bio:'自我介紹',created_at:'加入日期'};
+ const extra=Object.entries(fieldLabels).filter(([k])=>data[k]&&k!=='display_name').map(([k,label])=>'<p><b>'+label+'：</b>'+esc(k==='created_at'?new Date(data[k]).toLocaleDateString('zh-TW'):data[k])+'</p>').join('');
+ $('userInfo').textContent='';
+ $('profileDetails').innerHTML='<p><b>顯示名稱：</b>'+esc(data.display_name||'尚未設定')+'</p><p><b>Email：</b>'+esc(user.email||data.email||'未提供')+'</p><p><b>帳號身分：</b>'+esc(roleLabel[data.role]||data.role||'一般會員')+'</p>'+extra+'<p><b>會員識別碼：</b><span class="muted">'+esc(data.id)+'</span></p>';
+ $('authMsg').textContent='';
+ updateNav();
+ await loadMyContent();
+}
 function updateNav(){
  const signedIn=!!currentUser;
  $('authGuest').classList.toggle('hidden',signedIn);
