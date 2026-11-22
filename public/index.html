@@ -36,7 +36,7 @@
 <main class="wrap">
 <section class="view active" id="view-camps"><div class="toolbar"><div><div class="count" id="count">正在載入營區…</div><div class="muted">資料來源與合法狀態請以各筆資料標示為準</div></div><select id="sort" style="max-width:180px"><option value="name">依名稱排序</option><option value="county">依縣市排序</option><option value="featured">精選優先</option></select></div><div class="cards" id="campCards"></div><div class="pager" id="pager"></div></section>
 <section class="view" id="view-journals"><div class="toolbar"><h2>露營日誌</h2><button onclick="openJournalComposer()">寫一篇日誌</button></div><div id="journalList" class="panel">載入中…</div></section>
-<section class="view" id="view-market"><div class="toolbar"><h2>露營裝備交流</h2><button onclick="requireAuth('刊登裝備')">刊登裝備</button></div><div id="marketList" class="panel">載入中…</div></section>
+<section class="view" id="view-market"><div class="toolbar"><h2>露營裝備交流</h2><button onclick="openMarketComposer()">刊登裝備</button></div><div id="marketList" class="panel">載入中…</div></section>
 <section class="view" id="view-claim"><div class="panel"><h2>營區認領申請</h2><p class="muted">營主可申請認領既有營區。經網站業主核准後，才可管理該營區。</p><div class="field"><label>要認領的營區</label><select id="claimCampsite"><option value="">請選擇營區</option></select></div><div class="field"><label>營主姓名／聯絡方式</label><input id="claimContact" placeholder="姓名及可聯絡方式"></div><div class="field"><label>營主身分或證明說明</label><textarea id="claimProof" placeholder="請說明你與營區的關係及可供核對資料"></textarea></div><button onclick="submitClaim()">送出認領申請</button></div></section>
 <section class="view" id="view-account"><div class="panel"><h2>會員帳號</h2><div class="notice">一般會員註冊後可收藏、發表日誌、評論及刊登裝備。營主需另行申請認領。</div><div class="grid2"><div class="field"><label>Email</label><input id="email" type="email" autocomplete="email"></div><div class="field"><label>密碼</label><input id="password" type="password" autocomplete="current-password"></div></div><div class="actions"><button onclick="signUp()">註冊</button><button class="ghost" onclick="signIn()">登入</button><button class="ghost" onclick="signOut()">登出</button></div><p id="authMsg" class="muted"></p><p id="userInfo" class="muted"></p></div><div class="panel"><h3>我的內容</h3><div id="myContent" class="muted">登入後顯示你的日誌、裝備與認領狀態。</div></div></section>
 <section class="view" id="view-owner"><div class="toolbar"><h2>營主管理</h2><span class="status">僅管理已核准認領的營區</span></div><div id="ownerContent" class="panel">登入並取得營主權限後顯示。</div></section>
@@ -157,7 +157,25 @@ async function submitJournal(){
  if(error){toast('送出失敗：'+error.message);if(button)button.disabled=false;return}
  closeModal();toast('日誌與照片已送出，等待網站業主審核');loadPosts('journals');loadMyContent();
 }
-async function createPost(table){if(!requireAuth('發表'))return;let title=prompt(table==='journals'?'日誌標題':'裝備名稱');if(!title)return;let body=prompt(table==='journals'?'日誌內容':'商品描述')||'';let payload=table==='journals'?{user_id:currentUser.id,title,body,status:'pending'}:{user_id:currentUser.id,title,description:body,status:'pending'};if(table==='market_items'){let price=prompt('售價（輸入數字；不填代表面議）');payload.price=price?Number(price):null;payload.contact_method=prompt('聯絡方式')||''}let {error}=await sb.from(table).insert(payload);toast(error?error.message:'已送出，等待網站業主審核');loadMyContent()}
+function openMarketComposer(){
+ if(!requireAuth('刊登裝備'))return;
+ $('modalTitle').textContent='刊登露營裝備';
+ $('modalBody').innerHTML='<div class="journal-editor market-editor"><p class="muted">分享你想出售或交流的露營裝備。填寫商品資訊後送出，經網站業主審核通過才會公開。</p><div class="field"><label for="marketTitle">裝備名稱</label><input id="marketTitle" maxlength="100" placeholder="例如：充氣帳篷、露營桌椅"></div><div class="field"><label for="marketDescription">裝備介紹</label><textarea id="marketDescription" rows="8" placeholder="請描述品牌、型號、使用狀況、配件及交易方式……" style="min-height:190px;resize:vertical"></textarea></div><div class="grid2"><div class="field"><label for="marketPrice">售價（新台幣）</label><input id="marketPrice" type="number" min="0" step="1" placeholder="不填代表面議"></div><div class="field"><label for="marketContact">聯絡方式</label><input id="marketContact" maxlength="120" placeholder="例如：站內聯絡或 LINE"></div></div><div class="split"><span class="muted">內容會以你的會員帳號送出</span><span class="muted" id="marketCount">0 字</span></div><div class="actions" style="margin-top:16px"><button onclick="submitMarketItem()">送出刊登</button><button class="ghost" onclick="closeModal()">稍後再刊登</button></div></div>';
+ $('modalBack').classList.add('open');
+ $('marketDescription').addEventListener('input',()=>$('marketCount').textContent=$('marketDescription').value.length+' 字');
+}
+async function submitMarketItem(){
+ if(!requireAuth('刊登裝備'))return;
+ const title=$('marketTitle').value.trim(),description=$('marketDescription').value.trim(),priceText=$('marketPrice').value.trim(),contact_method=$('marketContact').value.trim();
+ if(!title){toast('請先填寫裝備名稱');$('marketTitle').focus();return}
+ if(!description){toast('請填寫裝備介紹');$('marketDescription').focus();return}
+ if(priceText!==''&&(!Number.isFinite(Number(priceText))||Number(priceText)<0)){toast('售價請填寫 0 或正數');$('marketPrice').focus();return}
+ const button=$('modalBody').querySelector('button');if(button)button.disabled=true;
+ const payload={user_id:currentUser.id,title,description,status:'pending',price:priceText===''?null:Number(priceText),contact_method};
+ const {error}=await sb.from('market_items').insert(payload);
+ if(error){toast('刊登失敗：'+error.message);if(button)button.disabled=false;return}
+ closeModal();toast('裝備已送出，等待網站業主審核');loadPosts('market_items');loadMyContent();
+}
 async function loadReviews(id){let box=$('reviews-'+id);if(!box)return;if(!sb){box.textContent='評論服務尚未連線';return}let {data,error}=await sb.from('reviews').select('rating,body,created_at').eq('campsite_id',id).eq('status','published').order('created_at',{ascending:false}).limit(20);box.innerHTML='<h3>露友評論</h3>'+(error?esc(error.message):(data||[]).map(r=>`<div class="entry"><b>${'★'.repeat(r.rating||0)}</b><p>${esc(r.body||'')}</p></div>`).join('')||'<p class="muted">還沒有評論。</p>')}
 async function writeReview(id){if(!requireAuth('評論'))return;let rating=Number(prompt('請評分 1～5 顆星'));if(!Number.isInteger(rating)||rating<1||rating>5)return;let body=prompt('分享你的體驗');if(body===null)return;let {error}=await sb.from('reviews').insert({user_id:currentUser.id,campsite_id:id,rating,body,status:'pending'});toast(error?error.message:'評論已送出，等待網站業主審核');loadReviews(id)}
 async function saveFavorite(id){if(!requireAuth('收藏'))return;let {error}=await sb.from('favorites').upsert({user_id:currentUser.id,campsite_id:id},{onConflict:'user_id,campsite_id'});toast(error?error.message:'已收藏營區')}
@@ -244,6 +262,5 @@ async function boot(){
  }else{updateNav()}
  await loadCamps();
 }
-boot();window.createJournal=()=>createPost('journals');window.createMarket=()=>createPost('market_items');
-$('view-market').querySelector('button').onclick=()=>createPost('market_items');
+boot();window.createJournal=()=>openJournalComposer();window.createMarket=()=>openMarketComposer();
 </script></body></html>
