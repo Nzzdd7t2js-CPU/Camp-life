@@ -73,6 +73,13 @@ alter table public.favorites enable row level security;
  drop policy if exists favorites_self on public.favorites;
 
 create policy profiles_read_self_admin on public.profiles for select using (id = auth.uid() or public.is_site_admin());
+-- 會員只能修改自己的暱稱；不開放修改 Email、role 等欄位。
+drop policy if exists profiles_update_nickname_self on public.profiles;
+create policy profiles_update_nickname_self on public.profiles
+  for update to authenticated
+  using (id = auth.uid())
+  with check (id = auth.uid());
+grant update (display_name) on public.profiles to authenticated;
 create policy campsites_public_read on public.campsites for select using (true);
 create policy campsites_admin_all on public.campsites for all using (public.is_site_admin()) with check (public.is_site_admin());
 create policy campsites_owner_update on public.campsites for update using (owner_user_id = auth.uid()) with check (owner_user_id = auth.uid());
