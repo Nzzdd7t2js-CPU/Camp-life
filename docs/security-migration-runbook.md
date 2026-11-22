@@ -69,7 +69,7 @@
 - `docs/production-permission-hardening-v2.sql`（commit `3700cd781247236d7a055bdc8067520514d42019`）
 - 依使用者上傳的 757 筆盤點 CSV 編寫，尚未在正式 Supabase 執行。
 - 撤銷 anon 的 INSERT／UPDATE／DELETE，並移除 PUBLIC、anon、authenticated 對指定應用資料表的 TRUNCATE／REFERENCES／TRIGGER。
-- 日誌、評論、二手裝備投稿要求 status='pending'；移除作者自行更新政策。
+- 日誌、評論、二手裝備投稿要求 status='pending'；透過資料庫 trigger 禁止作者自行改審核狀態，同時保留作者編輯自己內容的原有政策。
 - 空位政策改為 authenticated 營主本人可管理，並要求 updated_by = auth.uid()。
 - 不刪除或更新任何現有內容資料；不撤銷 authenticated 的一般 INSERT／UPDATE／DELETE 表級權限，避免直接中斷既有功能，仍由 RLS 限制資料列。
 
