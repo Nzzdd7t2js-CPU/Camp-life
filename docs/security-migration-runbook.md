@@ -61,3 +61,21 @@
 - 不將敏感認領文件存入公開 Storage bucket。
 - 不把 GitHub commit、SQL 腳本存在或前端按鈕限制，誤稱為正式環境已生效。
 - 不執行刪除資料、重建資料表或重設整個 Supabase 專案的操作，除非另有明確核准及可還原備份。
+
+
+## 七、依 2026-11-22 正式 Supabase 唯讀盤點新增的修正
+
+### 新增修正腳本
+- `docs/production-permission-hardening-v2.sql`（commit `3700cd781247236d7a055bdc8067520514d42019`）
+- 依使用者上傳的 757 筆盤點 CSV 編寫，尚未在正式 Supabase 執行。
+- 撤銷 anon 的 INSERT／UPDATE／DELETE，並移除 PUBLIC、anon、authenticated 對指定應用資料表的 TRUNCATE／REFERENCES／TRIGGER。
+- 日誌、評論、二手裝備投稿要求 status='pending'；移除作者自行更新政策。
+- 空位政策改為 authenticated 營主本人可管理，並要求 updated_by = auth.uid()。
+- 不刪除或更新任何現有內容資料；不撤銷 authenticated 的一般 INSERT／UPDATE／DELETE 表級權限，避免直接中斷既有功能，仍由 RLS 限制資料列。
+
+### 正式環境盤點的重要更正
+- CSV 顯示正式環境 `review_campsite_claim` 已經有營區列鎖定及 existing_owner 檢查，會拒絕把已由其他帳號認領的營區轉給新帳號。這項防重複認領保護已存在，不應再說正式環境沒有此保護。
+- 但正式環境尚無 `claim_audit_logs` 與 `set_claim_verification`；人工核實後才可核准的流程仍未上線。
+- 所有 8 張盤點資料表均已啟用 RLS，但均未設定 FORCE ROW LEVEL SECURITY。
+- CSV 顯示多張資料表曾授予 anon 或 authenticated 不必要的 TRUNCATE／REFERENCES／TRIGGER；新腳本優先移除這些權限。
+- 新腳本尚未執行，需先確認備份可用，再執行並檢查檔尾兩組驗收結果。
