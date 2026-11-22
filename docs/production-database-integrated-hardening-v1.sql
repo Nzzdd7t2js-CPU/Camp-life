@@ -36,11 +36,6 @@ begin
   if to_regprocedure('public.is_site_admin()') is null then
     raise exception '找不到 public.is_site_admin()；整份修正已中止。';
   end if;
-  if to_regclass('public.claim_requests') is null
-     or to_regclass('public.claim_audit_logs') is not null then
-    -- claim_audit_logs 已存在時允許重跑；僅保留此分支供可讀性。
-    null;
-  end if;
   if (select data_type from information_schema.columns
       where table_schema='public' and table_name='claim_requests' and column_name='id') <> 'uuid' then
     raise exception 'claim_requests.id 不是 uuid；整份修正已中止。';
@@ -236,21 +231,6 @@ $$;
 revoke all on function public.review_campsite_claim(uuid,boolean) from public;
 grant execute on function public.review_campsite_claim(uuid,boolean) to authenticated;
 
-select column_name, data_type, column_default
-from information_schema.columns
-where table_schema = 'public'
-  and table_name = 'claim_requests'
-  and column_name in (
-    'verification_method','verification_target','verification_status',
-    'verification_note','verification_checked_at','verification_checked_by',
-    'review_reason','reviewed_at'
-  )
-order by column_name;
-
-select tablename, rowsecurity
-from pg_tables
-where schemaname = 'public'
-  and tablename = 'claim_audit_logs'; 
 -- 第二部分：資料表權限、投稿審核與營主空位政策。
 revoke truncate, references, trigger
 on table public.profiles, public.campsites, public.campsite_availability,
@@ -320,6 +300,28 @@ create policy market_insert_self
   to authenticated
   with check (user_id = auth.uid() and status = 'pending');
 
+-- 目前網站前端沒有會員自行編輯投稿的功能；三類內容更新僅限網站業主。
+drop policy if exists journals_update_self_admin on public.journals;
+drop policy if exists journals_admin_update_only on public.journals;
+create policy journals_admin_update_only
+  on public.journals for update to authenticated
+  using (public.is_site_admin())
+  with check (public.is_site_admin());
+
+drop policy if exists reviews_update_self_admin on public.reviews;
+drop policy if exists reviews_admin_update_only on public.reviews;
+create policy reviews_admin_update_only
+  on public.reviews for update to authenticated
+  using (public.is_site_admin())
+  with check (public.is_site_admin());
+
+drop policy if exists market_update_self_admin on public.market_items;
+drop policy if exists market_admin_update_only on public.market_items;
+create policy market_admin_update_only
+  on public.market_items for update to authenticated
+  using (public.is_site_admin())
+  with check (public.is_site_admin());
+
 create or replace function public.prevent_member_content_status_change()
 returns trigger
 language plpgsql
@@ -329,7 +331,7 @@ as $guard$
 begin
   if old.status is distinct from new.status
      and not public.is_site_admin() then
-    raise exception '投稿者不能自行修改審核狀態';
+    raise exception '只有網站業主可以修改投稿審核狀態';
   end if;
   return new;
 end;
@@ -415,22 +417,6 @@ create policy availability_admin_all
   using (public.is_site_admin())
   with check (public.is_site_admin());
 
-select schemaname, tablename, policyname, roles, cmd, qual, with_check
-from pg_policies
-where schemaname = 'public'
-  and tablename in ('journals','reviews','market_items','campsite_availability')
-order by tablename, policyname;
-
-select grantee, table_name, privilege_type
-from information_schema.role_table_grants
-where table_schema = 'public'
-  and table_name in (
-    'profiles','campsites','campsite_availability','claim_requests',
-    'journals','reviews','market_items','favorites'
-  )
-  and grantee in ('anon','authenticated','PUBLIC')
-  and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')
-order by table_name, grantee, privilege_type;
 commit;
 
 -- 驗收 A：確認認領驗證欄位與稽核表。
