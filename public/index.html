@@ -25,7 +25,7 @@
 @media(max-width:800px){.availability-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.availability-fields button{min-height:44px}}
 @media(max-width:520px){.availability-fields{grid-template-columns:minmax(0,1fr)}.availability-fields label,.availability-fields input[type=date]{width:100%;min-width:0;max-width:100%}}
 
-</style>
+.claim-search-results{display:grid;gap:6px;margin-top:8px;max-height:320px;overflow:auto}.claim-result{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;padding:12px 14px;background:#f4f6f2;color:#203b30;border:1px solid #dce4dc;border-radius:10px;text-align:left}.claim-result span{font-size:.88em;color:#68756e}.claim-result:active{background:#e5eee7}</style>
 </head>
 <body>
 <header class="hero"><div class="wrap">
@@ -37,7 +37,7 @@
 <section class="view active" id="view-camps"><div class="toolbar"><div><div class="count" id="count">正在載入營區…</div><div class="muted">資料來源與合法狀態請以各筆資料標示為準</div></div><select id="sort" style="max-width:180px"><option value="name">依名稱排序</option><option value="county">依縣市排序</option><option value="featured">精選優先</option></select></div><div class="cards" id="campCards"></div><div class="pager" id="pager"></div></section>
 <section class="view" id="view-journals"><div class="toolbar"><h2>露營日誌</h2><button onclick="openJournalComposer()">寫一篇日誌</button></div><div id="journalList" class="panel">載入中…</div></section>
 <section class="view" id="view-market"><div class="toolbar"><h2>露營裝備交流</h2><button onclick="openMarketComposer()">刊登裝備</button></div><div id="marketList" class="panel">載入中…</div></section>
-<section class="view" id="view-claim"><div class="panel"><h2>營區認領申請</h2><p class="muted">營主可申請認領既有營區。經網站業主核准後，才可管理該營區。</p><div class="field"><label>要認領的營區</label><select id="claimCampsite"><option value="">請選擇營區</option></select></div><div class="field"><label>營主姓名／聯絡方式</label><input id="claimContact" placeholder="姓名及可聯絡方式"></div><div class="field"><label>營主身分或證明說明</label><textarea id="claimProof" placeholder="請說明你與營區的關係及可供核對資料"></textarea></div><button onclick="submitClaim()">送出認領申請</button></div></section>
+<section class="view" id="view-claim"><div class="panel"><h2>營區認領申請</h2><p class="muted">營主可申請認領既有營區。經網站業主核准後，才可管理該營區。</p><div class="field"><label for="claimSearch">搜尋要認領的營區</label><input id="claimSearch" type="search" placeholder="輸入營區名稱、縣市或鄉鎮搜尋" oninput="searchClaimCampsites()"><input id="claimCampsite" type="hidden" value=""><div id="claimSearchResults" class="claim-search-results" aria-live="polite"><span class="muted">請輸入營區名稱或所在地區，快速搜尋全台營區。</span></div><p id="claimSelected" class="muted">尚未選擇營區</p></div><div class="field"><label>營主姓名／聯絡方式</label><input id="claimContact" placeholder="姓名及可聯絡方式"></div><div class="field"><label>營主身分或證明說明</label><textarea id="claimProof" placeholder="請說明你與營區的關係及可供核對資料"></textarea></div><button onclick="submitClaim()">送出認領申請</button></div></section>
 <section class="view" id="view-account"><div class="panel"><h2>會員帳號</h2><div id="authGuest"><div class="notice">一般會員註冊後可收藏、發表日誌、評論及刊登裝備。營主需另行申請認領。</div><div class="grid2"><div class="field"><label>Email</label><input id="email" type="email" autocomplete="username"></div><div class="field"><label>密碼</label><input id="password" type="password" autocomplete="current-password"></div></div><div class="actions"><button onclick="signUp()">註冊</button><button class="ghost" onclick="signIn()">登入</button></div></div><div id="authMember" class="hidden"><h3>目前登入帳號</h3><div id="profileDetails" class="profile-details"></div><div class="actions"><button class="danger" onclick="signOut()">登出目前帳號</button></div></div><p id="authMsg" class="muted"></p><p id="userInfo" class="muted"></p></div><div id="myContentPanel" class="panel"><h3>我的內容</h3><div id="myContent" class="muted">登入後顯示你的日誌、裝備與認領狀態。</div></div></section>
 <section class="view" id="view-owner"><div class="toolbar"><h2>營主管理</h2><span class="status">僅管理已核准認領的營區</span></div><div id="ownerContent" class="panel">登入並取得營主權限後顯示。</div></section>
 <section class="view" id="view-admin"><div class="toolbar"><h2>網站業主管理</h2><span class="status">最高管理權限</span></div><div id="adminContent" class="panel">僅網站業主可使用。</div></section>
@@ -94,10 +94,10 @@ async function loadCamps(){
  $('count').textContent=`全台共 ${camps.length.toLocaleString()} 個營區`;
  $('county').innerHTML='<option value="">全部縣市</option>';
  $('area').innerHTML='<option value="">全部鄉鎮</option>';
- $('claimCampsite').innerHTML='<option value="">請選擇營區</option>';
+ 
  let counties=[...new Set(camps.map(x=>x.county).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  counties.forEach(v=>$('county').add(new Option(v,v)));
- camps.forEach(x=>$('claimCampsite').add(new Option(`${x.county||''} ${x.area||''}｜${x.name}`,x.id)));
+ 
  renderCamps();
 }
 function filtered(){let k=$('keyword').value.trim().toLowerCase(),c=$('county').value,a=$('area').value,av=$('availabilityFilter')?.value||'';let out=camps.filter(x=>{let s=String(x.availability_status||'').trim();let yes=/有空位|可預約|尚有名額|可訂位/i.test(s);let known=/有空位|可預約|尚有名額|可訂位|客滿|無空位|已滿/i.test(s);let dateState=availabilityMap.get(String(x.id));return (!c||x.county===c)&&(!a||x.area===a)&&(!av||(dateSearchActive?(av==='available'&&dateState?.status==='available')||(av==='unknown'&&(!dateState||dateState.status==='unknown')):(av==='available'&&yes)||(av==='unknown'&&!known)))&&(!k||[x.name,x.address,x.county,x.area,x.tagline,x.description,...asList(x.features),...asList(x.scenery)].join(' ').toLowerCase().includes(k))});let s=$('sort').value;if(s==='county')out.sort((a,b)=>`${a.county}${a.area}${a.name}`.localeCompare(`${b.county}${b.area}${b.name}`,'zh-Hant'));else if(s==='featured')out.sort((a,b)=>(b.is_featured===true)-(a.is_featured===true));else out.sort((a,b)=>String(a.name).localeCompare(String(b.name),'zh-Hant'));return out}
@@ -171,7 +171,23 @@ async function editMyNickname(){
  toast('暱稱已更新');
  await loadProfile();
 }
-async function submitClaim(){if(!requireAuth('認領'))return;let id=$('claimCampsite').value;if(!id)return toast('請選擇要認領的營區');let x=camps.find(c=>c.id===id);let {error}=await sb.from('claim_requests').insert({user_id:currentUser.id,campsite_id:id,campsite_name:x?.name||'',address:x?.address||'',proof_note:$('claimContact').value+'｜'+$('claimProof').value});toast(error?error.message:'已送出認領申請，等待業主審核')}
+function searchClaimCampsites(){
+ const q=$('claimSearch').value.trim().toLocaleLowerCase();
+ $('claimCampsite').value='';
+ $('claimSelected').textContent='尚未選擇營區';
+ if(!q){$('claimSearchResults').innerHTML='<span class="muted">請輸入營區名稱或所在地區，快速搜尋全台營區。</span>';return}
+ const matches=camps.filter(x=>[x.name,x.county,x.area,x.address].filter(Boolean).join(' ').toLocaleLowerCase().includes(q)).slice(0,30);
+ $('claimSearchResults').innerHTML=matches.length?matches.map(x=>'<button type="button" class="claim-result" onclick="chooseClaimCampsite(\''+esc(x.id)+'\')"><b>'+esc(x.name)+'</b><span>'+esc([x.county,x.area,x.address].filter(Boolean).join(' · '))+'</span></button>').join(''):'<div class="empty">找不到符合的營區，請試試營區名稱、縣市或鄉鎮。</div>';
+}
+function chooseClaimCampsite(id){
+ const x=camps.find(item=>String(item.id)===String(id));
+ if(!x)return;
+ $('claimCampsite').value=x.id;
+ $('claimSearch').value=x.name;
+ $('claimSearchResults').innerHTML='';
+ $('claimSelected').textContent='已選擇：'+[x.county,x.area,x.name].filter(Boolean).join('｜');
+}
+async function submitClaim(){if(!requireAuth('認領'))return;let id=$('claimCampsite').value;if(!id)return toast('請先搜尋並選擇要認領的營區');let x=camps.find(c=>String(c.id)===String(id));if(!x)return toast('選擇的營區不存在，請重新搜尋');let contact=$('claimContact').value.trim(),proof=$('claimProof').value.trim();if(!contact||!proof)return toast('請填寫營主姓名／聯絡方式及身分證明說明');let {error}=await sb.from('claim_requests').insert({user_id:currentUser.id,campsite_id:id,campsite_name:x.name||'',address:x.address||'',proof_note:contact+'｜'+proof});toast(error?'送出失敗：'+error.message:'已送出認領申請，等待業主審核')}
 async function loadPosts(table){
  let target=$(table==='journals'?'journalList':'marketList');
  if(!sb){target.innerHTML='目前無法連線資料服務';return}
