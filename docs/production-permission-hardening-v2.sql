@@ -122,7 +122,13 @@ create trigger market_items_guard_status
 before update on public.market_items
 for each row execute function public.prevent_member_content_status_change();
 
--- F. 空位：移除角色範圍過寬的舊 ALL policy，改用明確的 authenticated policies。
+-- F. 空位：明確授予登入會員必要的資料表操作權；實際可操作資料列仍由下方 RLS 限制。
+-- database_setup.sql 原本未明確授予 campsite_availability 寫入權，只有 policy 不足以讓營主透過 API 寫入。
+grant select, insert, update, delete
+on table public.campsite_availability
+to authenticated;
+
+-- 移除角色範圍過寬的舊 ALL policy，改用明確的 authenticated policies。
 drop policy if exists availability_owner_write on public.campsite_availability;
 drop policy if exists availability_owner_insert on public.campsite_availability;
 drop policy if exists availability_owner_update on public.campsite_availability;
