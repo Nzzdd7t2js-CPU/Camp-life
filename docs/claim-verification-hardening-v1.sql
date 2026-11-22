@@ -32,7 +32,7 @@ alter table public.claim_requests
 -- 延續先前的欄位級 INSERT 限制，只允許申請人額外提交驗證方式與公開管道。
 -- 不授予 verification_status、verification_note、verification_checked_by、
 -- reviewed_by、review_reason 或 reviewed_at 的直接寫入權限。
-revoke insert on table public.claim_requests from authenticated;
+revoke insert on table public.claim_requests from anon, public, authenticated;
 grant insert (
   user_id,
   campsite_id,
