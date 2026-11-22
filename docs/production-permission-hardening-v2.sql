@@ -94,7 +94,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $
+as $guard$
 begin
   if old.status is distinct from new.status
      and not public.is_site_admin() then
@@ -102,7 +102,7 @@ begin
   end if;
   return new;
 end;
-$;
+$guard$;
 
 revoke all on function public.prevent_member_content_status_change() from public;
 grant execute on function public.prevent_member_content_status_change() to authenticated;
@@ -183,14 +183,14 @@ create policy availability_admin_all
 
 commit;
 
--- H. 驗收查詢：確認投稿與空位政策已更新。
+-- G. 驗收查詢：確認投稿與空位政策已更新。
 select schemaname, tablename, policyname, roles, cmd, qual, with_check
 from pg_policies
 where schemaname = 'public'
   and tablename in ('journals','reviews','market_items','campsite_availability')
 order by tablename, policyname;
 
--- G. 驗收查詢：確認 anon 不再有 INSERT / UPDATE / DELETE / TRUNCATE。
+-- H. 驗收查詢：確認 anon 不再有 INSERT / UPDATE / DELETE / TRUNCATE。
 select grantee, table_name, privilege_type
 from information_schema.role_table_grants
 where table_schema = 'public'
