@@ -123,7 +123,39 @@ function updateNav(){
  if(accountNav)accountNav.textContent=currentUser?'會員帳號':'會員登入';
 }
 async function submitClaim(){if(!requireAuth('認領'))return;let id=$('claimCampsite').value;if(!id)return toast('請選擇要認領的營區');let x=camps.find(c=>c.id===id);let {error}=await sb.from('claim_requests').insert({user_id:currentUser.id,campsite_id:id,campsite_name:x?.name||'',address:x?.address||'',proof_note:$('claimContact').value+'｜'+$('claimProof').value});toast(error?error.message:'已送出認領申請，等待業主審核')}
-async function loadPosts(table){let target=$(table==='journals'?'journalList':'marketList');if(!sb){target.innerHTML='目前無法連線資料服務';return}let {data,error}=await sb.from(table).select('*').eq('status','published').order('created_at',{ascending:false}).limit(60);if(error){target.textContent=error.message;return}target.innerHTML=(data||[]).map(x=>`<div class="entry"><div class="split"><h3>${esc(x.title)}</h3><span class="muted">${new Date(x.created_at).toLocaleDateString('zh-TW')}</span></div>${table==='journals'&&x.image_url?`<div class="journal-post-photo"><img loading="lazy" src="${esc(x.image_url)}" alt="${esc(x.title)}"></div>`:table==='market_items'&&Array.isArray(x.image_urls)&&x.image_urls[0]?`<div class="journal-post-photo"><img loading="lazy" src="${esc(x.image_urls[0])}" alt="${esc(x.title)}"></div>`:''}<p>${esc(x.body||x.description||'')}</p>${table==='market_items'?`<b>NT$ ${esc(x.price??'面議')}</b> · ${esc(x.contact_method||'請站內聯絡')}`:''}</div>`).join('')||'<div class="empty">目前還沒有公開內容。</div>'}
+async function loadPosts(table){
+ let target=$(table==='journals'?'journalList':'marketList');
+ if(!sb){target.innerHTML='目前無法連線資料服務';return}
+ let {data,error}=await sb.from(table).select('*').eq('status','published').order('created_at',{ascending:false}).limit(60);
+ if(error){target.textContent=error.message;return}
+ target.innerHTML=(data||[]).map(x=>table==='market_items'
+  ? '<article class="entry market-listing"><div class="split"><h3>'+esc(x.title)+'</h3><span class="muted">'+(x.created_at?new Date(x.created_at).toLocaleDateString('zh-TW'):'')+'</span></div>'+
+    (Array.isArray(x.image_urls)&&x.image_urls[0]?'<button class="market-image-button" type="button" onclick="openMarketDetail(\''+esc(x.id)+'\')"><img class="market-list-photo" loading="lazy" src="'+esc(x.image_urls[0])+'" alt="'+esc(x.title)+'"></button>':'')+
+    '<p>'+esc(x.description||'')+'</p><div class="market-list-meta"><b>NT$ '+esc(x.price??'面議')+'</b><span>'+esc(x.contact_method||'尚未提供聯絡方式')+'</span></div>'+
+    '<div class="actions"><button class="small" onclick="openMarketDetail(\''+esc(x.id)+'\')">查看商品／聯絡賣家</button></div></article>'
+  : '<div class="entry"><div class="split"><h3>'+esc(x.title)+'</h3><span class="muted">'+(x.created_at?new Date(x.created_at).toLocaleDateString('zh-TW'):'')+'</span></div>'+(x.image_url?'<div class="journal-post-photo"><img loading="lazy" src="'+esc(x.image_url)+'" alt="'+esc(x.title)+'"></div>':'')+'<p>'+esc(x.body||'')+'</p></div>'
+ ).join('')||'<div class="empty">目前還沒有公開內容。</div>';
+}
+async function openMarketDetail(id){
+ const {data:x,error}=await sb.from('market_items').select('*').eq('id',id).eq('status','published').maybeSingle();
+ if(error||!x){toast('目前無法讀取這項商品：'+(error?.message||'商品可能已下架'));return}
+ $('modalTitle').textContent=x.title||'裝備商品資訊';
+ const contact=String(x.contact_method||'').trim();
+ const phoneMatch=contact.match(/(?:\+?886[-\s]?)?0?9\d{2}[-\s]?\d{3}[-\s]?\d{3}/);
+ const safeUrl=/^https?:\/\/\S+$/i.test(contact);
+ const contactHtml=contact
+  ? (phoneMatch?'<a class="market-contact-link" href="tel:'+esc(phoneMatch[0].replace(/[^0-9+]/g,''))+'">'+esc(contact)+'（點擊撥打）</a>'
+    : safeUrl?'<a class="market-contact-link" href="'+esc(contact)+'" target="_blank" rel="noopener">開啟賣家提供的聯絡連結</a>'
+    : '<span>'+esc(contact)+'</span>')
+  : '<span class="muted">刊登者尚未提供聯絡方式</span>';
+ $('modalBody').innerHTML='<div class="market-detail">'+
+  (Array.isArray(x.image_urls)&&x.image_urls[0]?'<img class="market-detail-photo" src="'+esc(x.image_urls[0])+'" alt="'+esc(x.title)+'">':'')+
+  '<h2>'+esc(x.title||'')+'</h2><p class="market-detail-description">'+esc(x.description||'尚未提供商品介紹')+'</p>'+
+  '<div class="panel"><p><b>售價：</b>NT$ '+esc(x.price??'面議')+'</p><p><b>聯絡賣家：</b>'+contactHtml+'</p></div>'+
+  '<p class="muted">請先確認商品狀況、交易方式及面交／寄送細節，再自行與刊登者聯繫。</p>'+
+  '<div class="actions"><button class="ghost" onclick="closeModal()">關閉</button></div></div>';
+ $('modalBack').classList.add('open');
+}
 function openJournalComposer(){
  if(!requireAuth('新增日誌'))return;
  $('modalTitle').textContent='寫一篇露營日誌';
