@@ -27,6 +27,43 @@ on table public.profiles, public.campsites, public.campsite_availability,
          public.market_items, public.favorites
 from anon;
 
+-- A2. CSV 同時顯示 anon 有欄位層級 INSERT / UPDATE / REFERENCES。
+-- 撤銷這些欄位授權；單純 REVOKE 表層級權限不會自動移除欄位層級授權。
+do $
+declare
+  r record;
+  cols text;
+begin
+  for r in
+    select table_name, privilege_type
+    from information_schema.role_column_grants
+    where table_schema = 'public'
+      and table_name in (
+        'profiles','campsites','campsite_availability','claim_requests',
+        'journals','reviews','market_items','favorites'
+      )
+      and grantee = 'anon'
+      and privilege_type in ('INSERT','UPDATE','REFERENCES')
+    group by table_name, privilege_type
+  loop
+    select string_agg(quote_ident(column_name), ', ')
+      into cols
+    from information_schema.role_column_grants
+    where table_schema = 'public'
+      and table_name = r.table_name
+      and grantee = 'anon'
+      and privilege_type = r.privilege_type;
+
+    if cols is not null then
+      execute format(
+        'REVOKE %s (%s) ON TABLE public.%I FROM anon',
+        r.privilege_type, cols, r.table_name
+      );
+    end if;
+  end loop;
+end
+$;
+
 -- B. 日誌：只能以 pending 投稿；作者不得自行更新狀態或內容。
 drop policy if exists journals_insert_self on public.journals;
 create policy journals_insert_self
